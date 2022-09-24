@@ -20,24 +20,23 @@ import (
 
 type tsIgnoreChannelType []string
 
-
 func (i *tsIgnoreChannelType) String() string {
-    return "my string representation"
+	return "my string representation"
 }
 
 func (i *tsIgnoreChannelType) Set(value string) error {
-    *i = append(*i, value)
-    return nil
+	*i = append(*i, value)
+	return nil
 }
 
 // Variables used for command line parameters
 var (
-	Token string
-	Guild string
-	tsServerId int
-	tsUsername string
-	tsPassword string
-	tsUrl string
+	Token           string
+	Guild           string
+	tsServerId      int
+	tsUsername      string
+	tsPassword      string
+	tsUrl           string
 	tsIgnoreChannel tsIgnoreChannelType
 )
 
@@ -67,7 +66,6 @@ func init() {
 	}
 }
 
-
 func main() {
 	dg, err := discordgo.New("Bot " + Token)
 	if err != nil {
@@ -81,38 +79,55 @@ func main() {
 	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuildPresences | discordgo.IntentsGuildMembers | discordgo.IntentDirectMessages
 
 	err = dg.Open()
+
 	if err != nil {
 		fmt.Println("error opening connection,", err)
 		return
 	}
 
-	dg.RequestGuildMembers(Guild, "", 100, "members", true)
+	stopWatching := make(chan bool, 1)
+
+	go watchOnlineUsers(dg, stopWatching)
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
+	stopWatching <- true
 
 	// Cleanly close down the Discord session.
 	dg.Close()
 }
 
+func watchOnlineUsers(dg *discordgo.Session, stopWatchingChan <-chan bool) {
+	for {
+		dg.RequestGuildMembers(Guild, "", 100, "members", true)
+		select {
+		case <-stopWatchingChan:
+			break
+		case <-time.After(5 * time.Minute):
+			continue
+		}
+	}
+
+}
+
 func createTempUsername() string {
 	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0987654321"
-    b := make([]byte, 20)
-    for i := range b {
-        b[i] = charset[seededRand.Intn(len(charset)-1)]
-    }
-    return string(b)
+	b := make([]byte, 20)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset)-1)]
+	}
+	return string(b)
 }
 
 func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	tempUsername, found := teamspeakTempUsernames[m.Author.ID]
-	ch, err := s.UserChannelCreate(m.Author.ID)	
+	ch, err := s.UserChannelCreate(m.Author.ID)
 	if err != nil {
-		s.ChannelMessageSend(m.ChannelID, "Something went wrong sending a DM to " + m.Author.Username)
+		s.ChannelMessageSend(m.ChannelID, "Something went wrong sending a DM to "+m.Author.Username)
 		return
 	}
 
@@ -120,7 +135,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if found == false {
 		tmpUsername := createTempUsername()
 		teamspeakTempUsernames[m.Author.ID] = tmpUsername
-		s.ChannelMessageSend(ch.ID, "Please adjust your username on teamspeak to: " + tmpUsername)
+		s.ChannelMessageSend(ch.ID, "Please adjust your username on teamspeak to: "+tmpUsername)
 		s.ChannelMessageSend(ch.ID, "When done please type !enable_mention again")
 		return
 	}
@@ -128,7 +143,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	// If a temp username has been found we should check if the username is in use on teamspeak
 	tsUserId, found := getTeamspeakUserIdByName(tempUsername)
 	if found == false {
-		s.ChannelMessageSend(m.ChannelID, "Could not find a user with username: " + tempUsername)
+		s.ChannelMessageSend(m.ChannelID, "Could not find a user with username: "+tempUsername)
 		return
 	}
 
@@ -155,9 +170,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	// Request listing of all members of server, including their presence status
-	s.RequestGuildMembers(Guild, "", 100, "members", true)
-
 	var message = ""
 
 	for _, userId := range userPresence {
@@ -165,7 +177,6 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			message = message + "<@" + userId + ">"
 		}
 	}
-
 
 	if message != "" {
 		sentMessage, _ := s.ChannelMessageSend(m.ChannelID, message)
@@ -181,7 +192,6 @@ func presenceHandler(s *discordgo.Session, u *discordgo.GuildMembersChunk) {
 		if p.User.ID == s.State.User.ID {
 			continue
 		}
-
 
 		userTeamspeakId, found := discordTeamspeakMapping[p.User.ID]
 		if found == true && slices.Contains(teamspeakUsers, userTeamspeakId) {
@@ -215,11 +225,11 @@ func getTeamspeakUsers() {
 	teamspeakUsers = make([]string, 0)
 	for _, tsUser := range clients {
 		// If user is a query client, skip it
-		if (tsUser.Type == 1) {
+		if tsUser.Type == 1 {
 			continue
 		}
 		// If user is in a channel we want to ignore, ignore the user.
-		if (slices.Contains(tsIgnoreChannel, strconv.Itoa(tsUser.ChannelID))) {
+		if slices.Contains(tsIgnoreChannel, strconv.Itoa(tsUser.ChannelID)) {
 			continue
 		}
 		teamspeakUsers = append(teamspeakUsers, strconv.Itoa(tsUser.DatabaseID))
@@ -250,7 +260,7 @@ func getTeamspeakUserIdByName(name string) (int, bool) {
 	teamspeakUsers = make([]string, 0)
 	for _, tsUser := range clients {
 		// If user is a query client, skip it
-		if (tsUser.Type == 1) {
+		if tsUser.Type == 1 {
 			continue
 		}
 		if tsUser.Nickname == name {

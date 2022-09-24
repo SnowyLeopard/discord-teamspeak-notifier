@@ -16,3 +16,6 @@
 
 
 discordTeamspeakMapping.json
+
+# Exlude the built binary
+discord-teamspeak-notifier
