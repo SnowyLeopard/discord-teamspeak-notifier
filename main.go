@@ -38,13 +38,13 @@ func init() {
 func main() {
 	tc, err := teamspeak.Init(tsServerId, tsUsername, tsPassword, tsUrl, tsIgnoreChannel)
 	if err != nil {
-		fmt.Println("Error: %s", err)
+		fmt.Printf("Error: %s", err)
 		return 
 	}
 
 	dg, err := discord.Init(tc, Token, Guild)
 	if err != nil {
-		fmt.Println("Error: %s", err)
+		fmt.Printf("Error: %s", err)
 		return 
 	}
 
