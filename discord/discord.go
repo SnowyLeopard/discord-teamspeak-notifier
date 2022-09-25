@@ -38,7 +38,7 @@ func Init(tc *ts3.Client, token string, guild string) (*discordgo.Session, error
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
-		return dg, fmt.Errorf("error creating Discord session,", err)
+		return dg, fmt.Errorf("error creating Discord session: %s", err)
 	}
 
 	dg.AddHandler(onMessage)
@@ -49,7 +49,7 @@ func Init(tc *ts3.Client, token string, guild string) (*discordgo.Session, error
 	err = dg.Open()
 
 	if err != nil {
-		return dg, fmt.Errorf("error opening connection,", err)
+		return dg, fmt.Errorf("error opening connection: %s", err)
 	}
 
 	return dg, err
