@@ -1,27 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/bwmarrin/discordgo"
+	"discord-teamspeak-notifier/discord"
+	"discord-teamspeak-notifier/teamspeak"
 )
-
-type tsIgnoreChannelType []string
-
-func (i *tsIgnoreChannelType) String() string {
-	return "my string representation"
-}
-
-func (i *tsIgnoreChannelType) Set(value string) error {
-	*i = append(*i, value)
-	return nil
-}
 
 // Variables used for command line parameters
 var (
@@ -31,14 +19,10 @@ var (
 	tsUsername      string
 	tsPassword      string
 	tsUrl           string
-	tsIgnoreChannel tsIgnoreChannelType
+	tsIgnoreChannel teamspeak.TsIgnoreChannelType
 )
 
-var discordTeamspeakMapping map[string]string
-var userPresence []string
-var teamspeakUsers []string
 
-var teamspeakTempUsernames map[string]string
 
 func init() {
 	flag.StringVar(&Token, "t", "", "Bot Token")
@@ -49,39 +33,23 @@ func init() {
 	flag.StringVar(&tsUrl, "tsUrl", "", "Teamspeak server query url")
 	flag.Var(&tsIgnoreChannel, "tsIgnoreChannel", "Ignores users in this channel id")
 	flag.Parse()
-
-	teamspeakTempUsernames = make(map[string]string)
-
-	// Read existing mappings from file
-	discordTeamspeakMapping = make(map[string]string)
-	file, err := ioutil.ReadFile("discordTeamspeakMapping.json")
-	if err == nil {
-		json.Unmarshal(file, &discordTeamspeakMapping)
-	}
 }
 
 func main() {
-	dg, err := discordgo.New("Bot " + Token)
+	tc, err := teamspeak.Init(tsServerId, tsUsername, tsPassword, tsUrl, tsIgnoreChannel)
 	if err != nil {
-		fmt.Println("error creating Discord session,", err)
-		return
+		fmt.Println("Error: %s", err)
+		return 
 	}
 
-	dg.AddHandler(messageCreate)
-	dg.AddHandler(presenceHandler)
-
-	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuildPresences | discordgo.IntentsGuildMembers | discordgo.IntentDirectMessages
-
-	err = dg.Open()
-
+	dg, err := discord.Init(tc, Token, Guild)
 	if err != nil {
-		fmt.Println("error opening connection,", err)
-		return
+		fmt.Println("Error: %s", err)
+		return 
 	}
 
 	stopWatching := make(chan bool, 1)
-
-	go watchOnlineUsers(dg, stopWatching)
+	go discord.WatchOnlineUsers(dg, stopWatching)
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
@@ -92,6 +60,9 @@ func main() {
 
 	// Cleanly close down the Discord session.
 	dg.Close()
+
+	// Cleanly close down teamspeak session.
+	tc.Close()
 }
 
 
