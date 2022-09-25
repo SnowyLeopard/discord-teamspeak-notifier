@@ -156,6 +156,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 	} else {
 		_ = ioutil.WriteFile("discordTeamspeakMapping.json", jsonStr, 0644)
 	}
+	s.RequestGuildMembers(Guild, "", 100, "members", true)
 	s.ChannelMessageSend(m.ChannelID, "Bot has been enabled, you are now free to change back your name on teamspeak")
 }
 
