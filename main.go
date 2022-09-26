@@ -22,8 +22,6 @@ var (
 	tsIgnoreChannel teamspeak.TsIgnoreChannelType
 )
 
-
-
 func init() {
 	flag.StringVar(&Token, "t", "", "Bot Token")
 	flag.StringVar(&Guild, "g", "", "Guild id")
@@ -36,20 +34,24 @@ func init() {
 }
 
 func main() {
-	tc, err := teamspeak.Init(tsServerId, tsUsername, tsPassword, tsUrl, tsIgnoreChannel)
+	stopWatching := make(chan bool, 1)
+	tc, err := teamspeak.Init(tsServerId, tsUsername, tsPassword, tsUrl, tsIgnoreChannel, stopWatching)
+	// Cleanly close down teamspeak session.
+	defer tc.Close()
+
 	if err != nil {
 		fmt.Printf("Error: %s", err)
-		return 
+		return
 	}
 
 	dg, err := discord.Init(tc, Token, Guild)
+	// Cleanly close down the Discord session.
+	defer dg.Close()
+
 	if err != nil {
 		fmt.Printf("Error: %s", err)
-		return 
+		return
 	}
-
-	stopWatching := make(chan bool, 1)
-	go discord.WatchOnlineUsers(dg, stopWatching)
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
@@ -57,12 +59,4 @@ func main() {
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
 	stopWatching <- true
-
-	// Cleanly close down the Discord session.
-	dg.Close()
-
-	// Cleanly close down teamspeak session.
-	tc.Close()
 }
-
-

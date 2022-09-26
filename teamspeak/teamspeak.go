@@ -1,15 +1,18 @@
 package teamspeak
 
 import (
+	"discord-teamspeak-notifier/utils"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/multiplay/go-ts3"
 	"golang.org/x/exp/slices"
 )
 
 var teamspeakUsers []string
+var teamspeakClientIdMapping map[string]string = make(map[string]string, 0)
 
 type TsIgnoreChannelType []string
 
@@ -23,8 +26,14 @@ func (i *TsIgnoreChannelType) Set(value string) error {
 }
 
 var tsIgnoreChannel TsIgnoreChannelType
+var teamspeakUserPresence utils.Set = utils.Set{}
 
-func Init(tsServerId int, tsUsername string, tsPassword string, tsUrl string, ignoreChannel TsIgnoreChannelType) (*ts3.Client, error) {
+
+func GetTeamspeakUserPresence() utils.Set {
+	return teamspeakUserPresence
+}
+
+func Init(tsServerId int, tsUsername string, tsPassword string, tsUrl string, ignoreChannel TsIgnoreChannelType, stopWatchingChan <-chan bool) (*ts3.Client, error) {
 	tsIgnoreChannel = ignoreChannel
 
 	c, err := ts3.NewClient(tsUrl)
@@ -37,15 +46,77 @@ func Init(tsServerId int, tsUsername string, tsPassword string, tsUrl string, ig
 	}
 
 	c.Use(tsServerId)
+
+	c.Register(ts3.ServerEvents)
+	c.Register(ts3.ChannelEvents)
+	ch := c.Notifications()
+	go watchTeamspeak(ch, stopWatchingChan)
+
+
+	err = getAllTeamspeakUsers(c)
+	if err != nil {
+		return c, fmt.Errorf("Error: %s", err)
+	}
 	return c, nil
 }
 
-func GetTeamspeakUsers(c *ts3.Client) ([]string, error) {
+func watchTeamspeak(ch <-chan ts3.Notification, stopWatchingChan <-chan bool) {
+	for {
+		select {
+			case message := <-ch:
+				handleTeamspeakEvent(message)
+			case <-stopWatchingChan:
+				break
+			case <-time.After(5 * time.Second):
+				continue
+		}
+	}
+}
+
+func handleTeamspeakEvent(message ts3.Notification) {
+	data := message.Data
+	// Skip users with type 1 (query connections)
+	if data["client_type"] == "1" {
+		return
+	}
+
+	clientId := data["clid"]
+
+	// Reasonid 0 == connected
+	// others are "disconnect" related, voluntary or not.
+	if data["reasonid"] == "0" {
+		dbId, found := data["client_database_id"]
+		fmt.Println("db id", dbId)
+
+		if !found {
+			dbId = teamspeakClientIdMapping[clientId]
+		} else {
+			// Disconnect events don't include any database id, so we need to keep a mapping between current client ids and
+			// their database ids.
+			teamspeakClientIdMapping[clientId] = dbId
+		}
+
+		// If user moves to a channel we want to ignore, ignore the user.
+		if slices.Contains(tsIgnoreChannel, data["ctid"]) {
+			teamspeakUserPresence.Remove(teamspeakClientIdMapping[clientId])
+			return
+		}
+
+		teamspeakUserPresence.Add(dbId)
+		return
+	}
+
+	// When a client disconnects we lookup the database id of this client id
+	// and remove it as a present user.
+	teamspeakUserPresence.Remove(teamspeakClientIdMapping[clientId])
+	delete(teamspeakClientIdMapping, clientId)
+}
+
+func getAllTeamspeakUsers(c *ts3.Client) error {
 	clients, err := c.Server.ClientList()
-	teamspeakUsers = make([]string, 0)
 
 	if err != nil {
-		return teamspeakUsers, fmt.Errorf("Error: %s", err)
+		return fmt.Errorf("Error: %s", err)
 	}
 
 	for _, tsUser := range clients {
@@ -53,13 +124,23 @@ func GetTeamspeakUsers(c *ts3.Client) ([]string, error) {
 		if tsUser.Type == 1 {
 			continue
 		}
-		// If user is in a channel we want to ignore, ignore the user.
-		if slices.Contains(tsIgnoreChannel, strconv.Itoa(tsUser.ChannelID)) {
-			continue
+
+		dbId := strconv.Itoa(tsUser.DatabaseID)
+
+		// If user is in a channel we don't want to ignore, ignore the user.
+		if !slices.Contains(tsIgnoreChannel, strconv.Itoa(tsUser.ChannelID)) {
+			fmt.Println(dbId, tsUser.ChannelID)
+			// Add  currently connected users as present
+			teamspeakUserPresence.Add(dbId)
 		}
-		teamspeakUsers = append(teamspeakUsers, strconv.Itoa(tsUser.DatabaseID))
+
+		// Disconnect events don't include any database id, so we need to keep a mapping between current client ids and
+		// their database ids.
+		userId := strconv.Itoa(tsUser.ID)
+		teamspeakClientIdMapping[userId] = dbId
 	}
-	return teamspeakUsers, nil
+	fmt.Println("all ts users", teamspeakClientIdMapping)
+	return nil
 }
 
 func GetTeamspeakUserIdByName(c *ts3.Client, name string) (int, error) {
