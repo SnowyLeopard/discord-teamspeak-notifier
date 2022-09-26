@@ -131,7 +131,7 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		teamspeakUserId, found := discordTeamspeakMapping[userId]
 		if !found {
 			fmt.Printf("Error finding present user with id: %s", userId)
-			return
+			continue
 		}
 
 		// If this discord user is not present on teamspeak, continue.
