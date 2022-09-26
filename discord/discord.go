@@ -59,7 +59,6 @@ func Init(tc *ts3.Client, token string, guild string) (*discordgo.Session, error
 }
 
 func requestGuildMembers(dg *discordgo.Session) {
-	fmt.Println("requesting")
 	// Request all members for a specific guild (server).
 	// Given a query, limit (how much users we want to fetch, 0 means all of them),
 	// a "nonce" string, and whether we would like "presence" information of the users

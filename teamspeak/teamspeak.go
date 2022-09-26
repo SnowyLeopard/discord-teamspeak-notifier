@@ -86,7 +86,6 @@ func handleTeamspeakEvent(message ts3.Notification) {
 	// others are "disconnect" related, voluntary or not.
 	if data["reasonid"] == "0" {
 		dbId, found := data["client_database_id"]
-		fmt.Println("db id", dbId)
 
 		if !found {
 			dbId = teamspeakClientIdMapping[clientId]
@@ -129,7 +128,6 @@ func getAllTeamspeakUsers(c *ts3.Client) error {
 
 		// If user is in a channel we don't want to ignore, ignore the user.
 		if !slices.Contains(tsIgnoreChannel, strconv.Itoa(tsUser.ChannelID)) {
-			fmt.Println(dbId, tsUser.ChannelID)
 			// Add  currently connected users as present
 			teamspeakUserPresence.Add(dbId)
 		}
@@ -139,7 +137,6 @@ func getAllTeamspeakUsers(c *ts3.Client) error {
 		userId := strconv.Itoa(tsUser.ID)
 		teamspeakClientIdMapping[userId] = dbId
 	}
-	fmt.Println("all ts users", teamspeakClientIdMapping)
 	return nil
 }
 
