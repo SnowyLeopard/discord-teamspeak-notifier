@@ -45,14 +45,17 @@ func Init(tsServerId int, tsUsername string, tsPassword string, tsUrl string, ig
 		return c, fmt.Errorf("Error: %s", err)
 	}
 
+	// Switch to the correct teamspeak server
 	c.Use(tsServerId)
 
+	// Register for Server and Channel events
 	c.Register(ts3.ServerEvents)
 	c.Register(ts3.ChannelEvents)
-	ch := c.Notifications()
-	go watchTeamspeak(ch, stopWatchingChan)
 
+	// Watch teamspeak events
+	go watchTeamspeak(c.Notifications(), stopWatchingChan)
 
+	// Fetch all teamspeak users initially when launching this bot
 	err = getAllTeamspeakUsers(c)
 	if err != nil {
 		return c, fmt.Errorf("Error: %s", err)
@@ -87,6 +90,10 @@ func handleTeamspeakEvent(message ts3.Notification) {
 	if data["reasonid"] == "0" {
 		dbId, found := data["client_database_id"]
 
+		// Only new user connection events contain the client database id
+		// so when receiving an event about a user switching channels this only contains the current client id
+		// Via the teamspeakClientIdMapping we can lookup the current clientId's database id and use that.
+		// Else if it is present we store it in the mapping.
 		if !found {
 			dbId = teamspeakClientIdMapping[clientId]
 		} else {
@@ -101,6 +108,7 @@ func handleTeamspeakEvent(message ts3.Notification) {
 			return
 		}
 
+		// Else add it as a present user
 		teamspeakUserPresence.Add(dbId)
 		return
 	}
@@ -152,6 +160,7 @@ func GetTeamspeakUserIdByName(c *ts3.Client, name string) (int, error) {
 		if tsUser.Type == 1 {
 			continue
 		}
+		// If the user matches the given name, return the database id
 		if tsUser.Nickname == name {
 			return tsUser.DatabaseID, nil
 		}

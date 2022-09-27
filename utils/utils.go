@@ -1,26 +1,9 @@
 package utils
 
-
-func FindIndex(slice []string, searchValue string) int {
-	for index, el := range slice {
-		if searchValue == el {
-			return index
-		}
-
-	}
-	return -1
-}
-
-func RemoveElementByIndex(slice []string, index int) []string  {
-	sliceLen := len(slice)
-	sliceLastIndex := sliceLen - 1
-
-	if index != sliceLastIndex {
-		slice[index] = slice[sliceLastIndex]
-	}
-
-	return slice[:sliceLastIndex]
-}
+import (
+	"math/rand"
+	"time"
+)
 
 type Set map[string]struct{}
 
@@ -37,4 +20,15 @@ func (s Set) Remove(value string) {
 func (s Set) Has(value string) bool {
 	_, ok := s[value]
 	return ok
+}
+
+
+func RandomString() string {
+	var seededRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0987654321"
+	b := make([]byte, 20)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset)-1)]
+	}
+	return string(b)
 }
