@@ -94,12 +94,17 @@ func handleTeamspeakEvent(message ts3.Notification) {
 		// Via the teamspeakClientIdMapping we can lookup the current clientId's database id and use that.
 		// Else if it is present we store it in the mapping.
 		if !found {
-			dbId = teamspeakClientIdMapping[clientId]
+			dbId, found = teamspeakClientIdMapping[clientId]
+			if !found {
+				fmt.Printf("User database id not found! ClientId: %s", clientId)
+				return
+			}
 		} else {
 			// Disconnect events don't include any database id, so we need to keep a mapping between current client ids and
 			// their database ids.
 			teamspeakClientIdMapping[clientId] = dbId
 		}
+
 
 		// If user moves to a channel we want to ignore, ignore the user.
 		if slices.Contains(tsIgnoreChannel, data["ctid"]) {
