@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/multiplay/go-ts3"
 	"golang.org/x/exp/slices"
@@ -69,8 +68,6 @@ func watchTeamspeak(ch <-chan ts3.Notification, stopWatchingChan <-chan bool) {
 				handleTeamspeakEvent(message)
 			case <-stopWatchingChan:
 				break
-			case <-time.After(5 * time.Second):
-				continue
 		}
 	}
 }
