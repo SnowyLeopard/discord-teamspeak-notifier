@@ -7,6 +7,7 @@ require (
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/multiplay/go-ts3 v1.0.1 // indirect
+	github.com/namsral/flag v1.7.4-pre // indirect
 	golang.org/x/crypto v0.0.0-20210421170649-83a5a9bb288b // indirect
 	golang.org/x/exp v0.0.0-20220921164117-439092de6870 // indirect
 	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
