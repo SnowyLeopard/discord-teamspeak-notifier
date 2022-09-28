@@ -89,4 +89,6 @@ After launching the bot it uses events to update any user presence. For example 
 At that point you will not be mentioned anymore.
 When your status changes back to online you will start receiving mentions again.
 
-The same goes for teamspeak, when moving to any channel we are ignoring (via the ts_ignore_channel argument) you will be removed from the "presence" list.
+The same goes for teamspeak, when moving to any channel the bot is ignoring (via the ts_ignore_channel argument) you will be removed from the "presence" list.
+
+Both discord and teamspeak will also monitor online / offline events and will add or remove users accordingly.
