@@ -2,24 +2,24 @@ package discord
 
 import (
 	"discord-teamspeak-notifier/teamspeak"
+	"discord-teamspeak-notifier/utils"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/multiplay/go-ts3"
-	"golang.org/x/exp/slices"
 )
+
 var teamspeakTempUsernames map[string]string
 var discordTeamspeakMapping map[string]string
 
-var userPresence []string
+var discordUserPresence utils.Set = utils.Set{}
 
 var (
-	Guild string
+	Guild    string
 	TsClient *ts3.Client
 )
 
@@ -41,8 +41,9 @@ func Init(tc *ts3.Client, token string, guild string) (*discordgo.Session, error
 		return dg, fmt.Errorf("error creating Discord session: %s", err)
 	}
 
-	dg.AddHandler(onMessage)
-	dg.AddHandler(onGuildMembers)
+	dg.AddHandler(onMessage)        // Add handler for when any message is received
+	dg.AddHandler(onGuildMembers)   // Add handler for the "request guild members" response
+	dg.AddHandler(onPresenceUpdate) // Add handler for user presence update events
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsGuildPresences | discordgo.IntentsGuildMembers | discordgo.IntentDirectMessages
 
@@ -52,6 +53,8 @@ func Init(tc *ts3.Client, token string, guild string) (*discordgo.Session, error
 		return dg, fmt.Errorf("error opening connection: %s", err)
 	}
 
+	requestGuildMembers(dg)
+
 	return dg, err
 }
 
@@ -60,19 +63,6 @@ func requestGuildMembers(dg *discordgo.Session) {
 	// Given a query, limit (how much users we want to fetch, 0 means all of them),
 	// a "nonce" string, and whether we would like "presence" information of the users
 	dg.RequestGuildMembers(Guild, "", 0, "members", true)
-}
-
-func WatchOnlineUsers(dg *discordgo.Session, stopWatchingChan <-chan bool) {
-	for {
-		requestGuildMembers(dg)
-		select {
-		case <-stopWatchingChan:
-			break
-		case <-time.After(5 * time.Minute):
-			continue
-		}
-	}
-
 }
 
 func HandleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -86,7 +76,7 @@ func HandleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// If a temp username has not been set yet we need to generate one and notify the user.
 	if found == false {
-		tmpUsername := randomString()
+		tmpUsername := utils.RandomString()
 		teamspeakTempUsernames[m.Author.ID] = tmpUsername
 		s.ChannelMessageSend(ch.ID, fmt.Sprintf("Please adjust your username on teamspeak to: %s", tmpUsername))
 		s.ChannelMessageSend(ch.ID, "When done please type !enable_mention again")
@@ -118,7 +108,6 @@ func HandleCommand(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	requestGuildMembers(s)
 	s.ChannelMessageSend(m.ChannelID, "Bot has been enabled, you are now free to change back your name on teamspeak.")
 }
 
@@ -128,45 +117,59 @@ func onMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
+	// If message is starting with the enable command, handle it accordingly.
 	if strings.HasPrefix(m.Content, "!enable_mention") {
 		HandleCommand(s, m)
 		return
 	}
 
+	// See if any user needs mentioning
 	var message = ""
+	teamspeakUserPresence := teamspeak.GetTeamspeakUserPresence()
 
-	for _, userId := range userPresence {
-		if userId != m.Author.ID {
-			message = message + fmt.Sprintf("<@%s>", userId)
+	for userId := range discordUserPresence {
+		teamspeakUserId, found := discordTeamspeakMapping[userId]
+		// If this userId cannot be matched to any teamspeak user
+		// or this discord user is not present on teamspeak
+		// or the userId matches the one sending the current message we continue.
+		if !found || !teamspeakUserPresence.Has(teamspeakUserId) || userId == m.Author.ID {
+			continue
 		}
+
+		message = message + fmt.Sprintf("<@%s>", userId)
 	}
 
-	// When message is not empty, and thus contains users we should mention, send the message to the channel.
-	// Invoking mentions to the applicable users.
-	// We also directly remove the message since the message itself is not relevant, we only want to trigger the mention notification.
-	if message != "" {
-		sentMessage, _ := s.ChannelMessageSend(m.ChannelID, message)
-		s.ChannelMessageDelete(m.ChannelID, sentMessage.ID)
+	// When the message is still empty we don't try sending any messages
+	if message == "" {
+		return
 	}
+
+	// Send the message to the channel.
+	// We also directly remove the message since the message itself is not relevant, we only want to trigger the mention notification.
+	sentMessage, _ := s.ChannelMessageSend(m.ChannelID, message)
+	s.ChannelMessageDelete(m.ChannelID, sentMessage.ID)
 
 }
 
 func onGuildMembers(s *discordgo.Session, u *discordgo.GuildMembersChunk) {
-	teamspeakUsers, err := teamspeak.GetTeamspeakUsers(TsClient)
-	if err != nil {
-		fmt.Printf("Error %s", err)
-		return
-	}
-	tmpPresence := make([]string, 0)
 	for _, p := range u.Presences {
-		if p.User.ID == s.State.User.ID {
+		// If the user matches this bot, skip it.
+		// If the user is not online, skip it.
+		if p.User.ID == s.State.User.ID || p.Status != "online" {
 			continue
 		}
 
-		userTeamspeakId, found := discordTeamspeakMapping[p.User.ID]
-		if found == true && slices.Contains(teamspeakUsers, userTeamspeakId) {
-			tmpPresence = append(tmpPresence, p.User.ID)
-		}
+		discordUserPresence.Add(p.User.ID)
 	}
-	userPresence = tmpPresence
+}
+
+func onPresenceUpdate(s *discordgo.Session, u *discordgo.PresenceUpdate) {
+	// When the user switches to any status other than "online" we remove the user from the discord presence list
+	if u.Presence.Status != "online" {
+		discordUserPresence.Remove(u.User.ID)
+		return
+	}
+
+	// Else we add the user
+	discordUserPresence.Add(u.User.ID)
 }
