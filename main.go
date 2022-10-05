@@ -1,11 +1,12 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/namsral/flag"
 
 	"discord-teamspeak-notifier/discord"
 	"discord-teamspeak-notifier/teamspeak"
@@ -23,13 +24,13 @@ var (
 )
 
 func init() {
-	flag.StringVar(&Token, "t", "", "Bot Token")
-	flag.StringVar(&Guild, "g", "", "Guild id")
-	flag.IntVar(&tsServerId, "tsServerId", 1, "Teamspeak server id")
-	flag.StringVar(&tsUsername, "tsUser", "", "Teamspeak server query username")
-	flag.StringVar(&tsPassword, "tsPassword", "", "Teamspeak server query password")
-	flag.StringVar(&tsUrl, "tsUrl", "", "Teamspeak server query url")
-	flag.Var(&tsIgnoreChannel, "tsIgnoreChannel", "Ignores users in this channel id")
+	flag.StringVar(&Token, "discord_bot_token", "", "Bot Token")
+	flag.StringVar(&Guild, "discord_guild_id", "", "Guild id")
+	flag.IntVar(&tsServerId, "ts_server_id", 1, "Teamspeak server id")
+	flag.StringVar(&tsUsername, "ts_user", "", "Teamspeak server query username")
+	flag.StringVar(&tsPassword, "ts_password", "", "Teamspeak server query password")
+	flag.StringVar(&tsUrl, "ts_url", "", "Teamspeak server query url")
+	flag.Var(&tsIgnoreChannel, "ts_ignore_channel", "Ignores users in this channel id")
 	flag.Parse()
 }
 
